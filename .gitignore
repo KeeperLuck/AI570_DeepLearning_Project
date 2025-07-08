@@ -1,0 +1,7 @@
+venv
+scripts/*
+!scripts/*.py
+!scripts/*.ipynb
+.DS_Store
+data/*
+!data/.gitkeep
