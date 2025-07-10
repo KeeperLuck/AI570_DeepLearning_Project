@@ -3,6 +3,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy
 import tensorflow
+import numpy as np
 
 ######################
 # Load data in the simplest way possible
@@ -66,6 +67,44 @@ def handMadeSegmentation(image, threshold=150):
     # Invert the image
     inverted_image= cv2.bitwise_not(laplacian_image)
     return inverted_image
+
+######################
+# This is a segmentation algorithm Lin Et Al. Applied for greenness thresholds
+# from one of the papers for my Literature Review and will return a greenness mask to be applied
+def getGreennessMask(image, greenness_thresh=0.1):
+    #Convert to HSV like lin et al. to create binary mask
+    hsv = cv2.cvtColor(image, cv2.COLOR_RGB2HSV)
+    h, s, v = cv2.split(hsv)
+
+    # Normalize H, S, V to float values in range of [0,1]
+    h = h.astype(np.float32)
+    s = s.astype(np.float32) / 255
+    v = v.astype(np.float32) / 255
+
+    #Calculate greenness score for each pixel.
+    #Hue for green is around 60 in HSV. So we will penalize distance from 60
+    #s = saturation, v = value or brightness, and h = hue, so we will find the distance from
+    #green and then normalize to be between 0 and 1.
+    greenness = s * v * (1 - np.abs(h - 60) / 60)
+    greenness = np.clip(greenness, 0, 1)
+
+    #Create and return binary mask from greenness score
+    mask = (greenness >= greenness_thresh).astype(np.uint8) * 255
+    return mask
+
+def getEdgesFromGreenness(image):
+    #Get a greenness mask from threshold, then apply to retrieve only leaf
+    mask = getGreennessMask(image)
+    leaf_only = cv2.bitwise_and(image, image, mask=mask)
+
+    #Convert to grayscale for CLAHE
+    gray_leaf = cv2.cvtColor(leaf_only, cv2.COLOR_RGB2GRAY)
+
+    #Apply CLAHE
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    enhanced_leaf = clahe.apply(gray_leaf)
+
+    return enhanced_leaf
 
 ######################
 # Display a given image with the given title
