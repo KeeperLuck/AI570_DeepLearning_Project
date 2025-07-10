@@ -5,3 +5,4 @@ scripts/*
 .DS_Store
 data/*
 !data/.gitkeep
+.idea/
