@@ -65,8 +65,7 @@ class BaseModel:
                         true_labels = np.argmax(true_labels, axis=1)
                 acc = accuracy_score(true_labels, predicted_classes)
                 print("Test Accuracy:", acc)
-                print(classification_report(true_labels, predicted_classes, target_names=features.classes))
-
+                print(classification_report(true_labels, predicted_classes))
                 return predictions
 
 
