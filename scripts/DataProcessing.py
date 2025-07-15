@@ -1,8 +1,10 @@
+import os
 import cv2
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy
 import tensorflow
+from tensorflow.keras.applications.vgg19 import preprocess_input
 import numpy as np
 
 ######################
@@ -14,13 +16,26 @@ def loadDataset(dataset_path, image_size=(128,128), batch_size=32, shuffle=False
             dataset_path,
             image_size=image_size,
             batch_size=batch_size,
-            shuffle=shuffle
+            shuffle=shuffle,
+            label_mode='int'
         )
         return data
     except Exception as E:
         print(f"Unable to get dataset at location {dataset_path}:\n\n{E}")
         return None
 
+def loadAllDatasets(dataset_path):
+    training_path = os.path.join(dataset_path, "base_model_data/Train_Set_Folder")
+    val_path = os.path.join(dataset_path, "base_model_data/Validation_Set_Folder")
+    testing_path = os.path.join(dataset_path, "base_model_data/Test_Set_Folder")
+
+    training_data = loadDataset(training_path, batch_size=None, shuffle=True)
+    val_data = loadDataset(val_path, batch_size=None)
+    testing_data = loadDataset(testing_path, batch_size=None)
+
+    class_names = training_data.class_names
+
+    return training_data, val_data, testing_data, class_names
 ######################
 # Get a single image and return it as a CV2 image
 def loadImage(image_path):
@@ -73,6 +88,10 @@ def handMadeSegmentation(image, threshold=150):
 # from one of the papers for my Literature Review and will return a greenness mask to be applied
 def getGreennessMask(image, greenness_thresh=0.1):
     #Convert to HSV like lin et al. to create binary mask
+    if image.ndim == 2 or image.shape[-1] == 1:
+        image = cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)
+    elif image.shape[-1] == 4:
+        image = cv2.cvtColor(image, cv2.COLOR_RGBA2RGB)
     hsv = cv2.cvtColor(image, cv2.COLOR_RGB2HSV)
     h, s, v = cv2.split(hsv)
 
@@ -94,6 +113,10 @@ def getGreennessMask(image, greenness_thresh=0.1):
 
 def getEdgesFromGreenness(image):
     #Get a greenness mask from threshold, then apply to retrieve only leaf
+    if image.ndim == 2 or image.shape[-1] == 1:
+        image = cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)
+    elif image.shape[-1] == 4:
+        image = cv2.cvtColor(image, cv2.COLOR_RGBA2RGB)
     mask = getGreennessMask(image)
     leaf_only = cv2.bitwise_and(image, image, mask=mask)
 
@@ -107,8 +130,84 @@ def getEdgesFromGreenness(image):
     return enhanced_leaf
 
 ######################
+# Creates data pipeline for returning zipped dataset of raw (images we got from Kaggle) and segmented data
+def create_dual_input_dataset(dataset, segmentation_fn):
+    def process(image, label):
+        def segment(image_np):
+            image_np = image_np.astype(np.uint8)
+
+            # Ensure RGB shape
+            if image_np.ndim == 2:
+                image_np = cv2.cvtColor(image_np, cv2.COLOR_GRAY2RGB)
+            elif image_np.shape[-1] == 1:
+                image_np = cv2.cvtColor(np.squeeze(image_np, axis=-1), cv2.COLOR_GRAY2RGB)
+
+            # Apply segmentation function of choice
+            mask = segmentation_fn(image_np)
+
+            # Normalize mask to [0, 1]
+            mask = mask.astype(np.float32) / 255.0
+            if mask.ndim == 3:
+                mask = cv2.cvtColor(mask, cv2.COLOR_BGR2GRAY)
+            mask = np.expand_dims(mask, axis=-1)
+            mask = np.clip(np.nan_to_num(mask), 0.0, 1.0)
+
+            # Preprocess image for VGG19 but have to convert to NP float 32 first
+            image_np = image_np.astype(np.float32)
+            image_np = preprocess_input(image_np)  # Note: doesn't normalize to [0, 1]
+
+            return image_np, mask
+
+        # Apply function using tensorflow.numpy_function
+        raw, mask = tensorflow.numpy_function(
+            func=segment,
+            inp=[image],
+            Tout=(tensorflow.float32, tensorflow.float32)
+        )
+
+        # Set shapes manually so that model TF can use
+        raw.set_shape([128, 128, 3])
+        mask.set_shape([128, 128, 1])
+        label.set_shape([])
+
+        #Must return in tuple of raw and mask for multiple inputs
+        return (raw, mask), label
+
+    # Apply mapping and batching AFTER segmentation - this allows us to process each image indivudually
+    return dataset.map(process, num_parallel_calls=tensorflow.data.AUTOTUNE).batch(32).prefetch(tensorflow.data.AUTOTUNE)
+
+
+######################
 # Display a given image with the given title
 def displayImage(image, title="Image"):
     plt.title(title)
     plt.imshow(image)
+    plt.show()
+
+######################
+# Display all images that have been preprocessed
+def displayProcessedImages(dataset, num_examples):
+    for (inputs, labels) in dataset.take(1):
+        raw_images = inputs[0].numpy()
+        mask_images = inputs[1].numpy()
+        labels = labels.numpy()
+        break
+
+    # Plot: 5 rows, 2 columns (Raw | Mask)
+    plt.figure(figsize=(8, num_examples * 2))
+
+    for i in range(num_examples):
+        # Raw Image
+        plt.subplot(num_examples, 2, i * 2 + 1)
+        plt.imshow(raw_images[i])
+        plt.title(f"Raw Image\nLabel: {labels[i]}")
+        plt.axis('off')
+
+        # Mask
+        plt.subplot(num_examples, 2, i * 2 + 2)
+        plt.imshow(mask_images[i].squeeze(), cmap='gray')
+        plt.title("Mask")
+        plt.axis('off')
+
+    plt.tight_layout()
     plt.show()
