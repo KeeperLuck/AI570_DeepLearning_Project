@@ -24,14 +24,14 @@ def loadDataset(dataset_path, image_size=(128,128), batch_size=32, shuffle=False
         print(f"Unable to get dataset at location {dataset_path}:\n\n{E}")
         return None
 
-def loadAllDatasets(dataset_path):
+def loadAllDatasets(dataset_path, batch_size=None):
     training_path = os.path.join(dataset_path, "base_model_data/Train_Set_Folder")
     val_path = os.path.join(dataset_path, "base_model_data/Validation_Set_Folder")
     testing_path = os.path.join(dataset_path, "base_model_data/Test_Set_Folder")
 
-    training_data = loadDataset(training_path, batch_size=None, shuffle=True)
-    val_data = loadDataset(val_path, batch_size=None)
-    testing_data = loadDataset(testing_path, batch_size=None)
+    training_data = loadDataset(training_path, batch_size=batch_size, shuffle=True)
+    val_data = loadDataset(val_path, batch_size=batch_size)
+    testing_data = loadDataset(testing_path, batch_size=batch_size)
 
     class_names = training_data.class_names
 

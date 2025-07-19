@@ -64,9 +64,9 @@ class BaseModel:
                 if true_labels.ndim > 1:
                         true_labels = np.argmax(true_labels, axis=1)
                 acc = accuracy_score(true_labels, predicted_classes)
-                print("Test Accuracy:", acc)
-                print(classification_report(true_labels, predicted_classes))
-                return predictions
+                cls_report= classification_report(true_labels, predicted_classes)
+
+                return predictions, true_labels, acc, cls_report
 
 
 if __name__ == "__main__":
