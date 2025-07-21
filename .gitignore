@@ -2,6 +2,8 @@ venv
 scripts/*
 !scripts/*.py
 !scripts/*.ipynb
+!scripts/plant_tuner
+!scripts/*.keras
 .DS_Store
 data/*
 !data/.gitkeep

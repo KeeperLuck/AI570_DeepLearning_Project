@@ -129,6 +129,22 @@ def getEdgesFromGreenness(image):
 
     return enhanced_leaf
 
+def is_green_enough(image_np, threshold=0.33):
+    #separate RGB and determine if image is green enough to use greenness
+    red = image_np[:, :, 0].astype(np.float32)
+    green = image_np[:, :, 1].astype(np.float32)
+    blue = image_np[:, :, 2].astype(np.float32)
+    total = red + green + blue + 1e-6  # prevent division by zero
+    green_ratio = np.mean(green / total)
+    return green_ratio > threshold
+
+
+def adaptive_segmentation(image_np):
+    if is_green_enough(image_np):
+        return getEdgesFromGreenness(image_np)
+    else:
+        return handMadeSegmentation(image_np, 110)
+
 ######################
 # Creates data pipeline for returning zipped dataset of raw (images we got from Kaggle) and segmented data
 def create_dual_input_dataset(dataset, segmentation_fn):
@@ -136,36 +152,36 @@ def create_dual_input_dataset(dataset, segmentation_fn):
         def segment(image_np):
             image_np = image_np.astype(np.uint8)
 
-            # Ensure RGB shape
+            # Ensure RGB shape by checking dimmensions and grayscale channel
             if image_np.ndim == 2:
                 image_np = cv2.cvtColor(image_np, cv2.COLOR_GRAY2RGB)
             elif image_np.shape[-1] == 1:
                 image_np = cv2.cvtColor(np.squeeze(image_np, axis=-1), cv2.COLOR_GRAY2RGB)
 
-            # Apply segmentation function of choice
+            #Apply segmentation function of choice
             mask = segmentation_fn(image_np)
 
-            # Normalize mask to [0, 1]
+            #Normalize mask to [0, 1]
             mask = mask.astype(np.float32) / 255.0
             if mask.ndim == 3:
                 mask = cv2.cvtColor(mask, cv2.COLOR_BGR2GRAY)
             mask = np.expand_dims(mask, axis=-1)
             mask = np.clip(np.nan_to_num(mask), 0.0, 1.0)
 
-            # Preprocess image for VGG19 but have to convert to NP float 32 first
+            #Preprocess image for VGG19 but have to convert to NP float 32 first
             image_np = image_np.astype(np.float32)
             image_np = preprocess_input(image_np)  # Note: doesn't normalize to [0, 1]
 
             return image_np, mask
 
-        # Apply function using tensorflow.numpy_function
+        #Apply function using tensorflow.numpy_function
         raw, mask = tensorflow.numpy_function(
             func=segment,
             inp=[image],
             Tout=(tensorflow.float32, tensorflow.float32)
         )
 
-        # Set shapes manually so that model TF can use
+        #Set shapes manually so that model TF can use
         raw.set_shape([128, 128, 3])
         mask.set_shape([128, 128, 1])
         label.set_shape([])
@@ -173,19 +189,19 @@ def create_dual_input_dataset(dataset, segmentation_fn):
         #Must return in tuple of raw and mask for multiple inputs
         return (raw, mask), label
 
-    # Apply mapping and batching AFTER segmentation - this allows us to process each image indivudually
+    #Apply mapping and batching AFTER segmentation - this allows us to process each image indivudually
     return dataset.map(process, num_parallel_calls=tensorflow.data.AUTOTUNE).batch(32).prefetch(tensorflow.data.AUTOTUNE)
 
 
 ######################
-# Display a given image with the given title
+#Display a given image with the given title
 def displayImage(image, title="Image"):
     plt.title(title)
     plt.imshow(image)
     plt.show()
 
 ######################
-# Display all images that have been preprocessed
+#Display all images that have been preprocessed
 def displayProcessedImages(dataset, num_examples):
     for (inputs, labels) in dataset.take(1):
         raw_images = inputs[0].numpy()
@@ -193,20 +209,20 @@ def displayProcessedImages(dataset, num_examples):
         labels = labels.numpy()
         break
 
-    # Plot: 5 rows, 2 columns (Raw | Mask)
+    #Plot: 5 rows, 2 columns (Raw | Mask)
     plt.figure(figsize=(8, num_examples * 2))
 
     for i in range(num_examples):
-        # Raw Image
+        #Raw Image (Preprocessed with VGG19)
         plt.subplot(num_examples, 2, i * 2 + 1)
         plt.imshow(raw_images[i])
-        plt.title(f"Raw Image\nLabel: {labels[i]}")
+        plt.title(f"Raw Image- VGG19 Preprocessed\nLabel: {labels[i]}")
         plt.axis('off')
 
-        # Mask
+        #Mask
         plt.subplot(num_examples, 2, i * 2 + 2)
         plt.imshow(mask_images[i].squeeze(), cmap='gray')
-        plt.title("Mask")
+        plt.title("Masked Image")
         plt.axis('off')
 
     plt.tight_layout()

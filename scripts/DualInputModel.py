@@ -10,6 +10,7 @@ class DualInputModel(BaseModel):
         self.image_shape = image_shape
         self.mask_shape = mask_shape
         self.num_classes = num_classes
+        self.tuner = None
 
     def buildModel(self):
         raw_input = Input(shape=self.image_shape, name='raw_input')
@@ -59,6 +60,10 @@ class DualInputModel(BaseModel):
 
         base_model = VGG19(include_top=False, weights='imagenet', input_tensor=raw_input)
         base_model.trainable = False
+
+        #Set top layers to not trainable
+        for layer in base_model.layers:
+            layer.trainable = False
 
         x1 = base_model.output
         x1 = layers.GlobalAveragePooling2D()(x1)
@@ -123,6 +128,7 @@ class DualInputModel(BaseModel):
         )
 
         tuner.search(train, validation_data=val, epochs=10)
+        self.tuner = tuner
         tuner.results_summary()
         best_model = tuner.get_best_models(num_models=1)[0]
         self.model = best_model
