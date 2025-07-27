@@ -66,17 +66,19 @@ def getImageStats(data_dir, max_images=500):
     print(f"Largest image size:  {max_size}")
     print(f"Most common size:    {most_common[0]} (count: {most_common[1]})")
 
-def loadAllDatasets(dataset_path, batch_size=None):
+def loadAllDatasets(dataset_path, batch_size=None, display_analysis=True):
     training_path = os.path.join(dataset_path, "base_model_data/Train_Set_Folder")
     val_path = os.path.join(dataset_path, "base_model_data/Validation_Set_Folder")
     testing_path = os.path.join(dataset_path, "base_model_data/Test_Set_Folder")
 
-    print(f'\n----------\nAnalyzing Training Data\n----------\n')
-    analyzeDataset(training_path)
-    print(f'\n----------\nAnalyzing Validation Data\n----------\n')
-    analyzeDataset(val_path)
-    print(f'\n----------\nAnalyzing Testing Data\n----------\n')
-    analyzeDataset(testing_path)
+    #Analyze datasets for image sizes and distribution
+    if display_analysis:
+        print(f'\n----------\nAnalyzing Training Data\n----------\n')
+        analyzeDataset(training_path)
+        print(f'\n----------\nAnalyzing Validation Data\n----------\n')
+        analyzeDataset(val_path)
+        print(f'\n----------\nAnalyzing Testing Data\n----------\n')
+        analyzeDataset(testing_path)
 
     training_data = loadDataset(training_path, batch_size=batch_size, shuffle=True, image_size=(224,224))
     val_data = loadDataset(val_path, batch_size=batch_size, image_size=(224,224))
@@ -161,23 +163,34 @@ def getGreennessMask(image, greenness_thresh=0.1):
     mask = (greenness >= greenness_thresh).astype(np.uint8) * 255
     return mask
 
-def getEdgesFromGreenness(image):
+def getEdgesFromGreenness(image, use_mpn=False):
     #Get a greenness mask from threshold, then apply to retrieve only leaf
     if image.ndim == 2 or image.shape[-1] == 1:
         image = cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)
     elif image.shape[-1] == 4:
         image = cv2.cvtColor(image, cv2.COLOR_RGBA2RGB)
+
+        if use_mpn:
+            #Midpoint normalization: [-1, 1]
+            #Converts to [0, 1] by centering around [-.5, .5], then multiplies by 2
+            mpn = (image.astype(np.float32) / 255.0 - 0.5) / 0.5
+            #Rescale to [0, 255] to keep same downstream flow
+            image = ((mpn + 1.0) / 2.0) * 255.0
+            #Needed to convert back to uint 8 for cv2 to work
+            image = image.astype(np.uint8)
+
     mask = getGreennessMask(image)
     leaf_only = cv2.bitwise_and(image, image, mask=mask)
 
     #Convert to grayscale for CLAHE
     gray_leaf = cv2.cvtColor(leaf_only, cv2.COLOR_RGB2GRAY)
+    if not use_mpn:
+        #Apply CLAHE
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+        enhanced_leaf = clahe.apply(gray_leaf)
+        return enhanced_leaf
 
-    #Apply CLAHE
-    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-    enhanced_leaf = clahe.apply(gray_leaf)
-
-    return enhanced_leaf
+    return gray_leaf
 
 def is_green_enough(image_np, threshold=0.33):
     #separate RGB and determine if image is green enough to use greenness
@@ -189,9 +202,9 @@ def is_green_enough(image_np, threshold=0.33):
     return green_ratio > threshold
 
 
-def adaptive_segmentation(image_np):
+def adaptive_segmentation(image_np, use_mpn=False):
     if is_green_enough(image_np):
-        return getEdgesFromGreenness(image_np)
+        return getEdgesFromGreenness(image_np, use_mpn=use_mpn)
     else:
         return handMadeSegmentation(image_np, 110)
 
