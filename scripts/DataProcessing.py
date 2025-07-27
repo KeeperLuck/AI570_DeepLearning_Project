@@ -1,4 +1,5 @@
 import os
+from collections import Counter
 import cv2
 import matplotlib
 import matplotlib.pyplot as plt
@@ -6,6 +7,7 @@ import numpy
 import tensorflow
 from tensorflow.keras.applications.vgg19 import preprocess_input
 import numpy as np
+from PIL import Image
 
 ######################
 # Load data in the simplest way possible
@@ -24,18 +26,66 @@ def loadDataset(dataset_path, image_size=(128,128), batch_size=32, shuffle=False
         print(f"Unable to get dataset at location {dataset_path}:\n\n{E}")
         return None
 
+def analyzeDataset(data_dir):
+    findClassDistribution(data_dir)
+    getImageStats(data_dir)
+    #Add more exploration techniques
+
+def findClassDistribution(data_dir):
+    counts = {cls: len(os.listdir(os.path.join(data_dir, cls))) for cls in os.listdir(data_dir)}
+    print(f'\n----------\nClass distribution is the following:\n{counts}\n----------\n')
+
+def getImageStats(data_dir, max_images=500):
+    dims = []
+    image_count = 0
+    for cls in os.listdir(data_dir):
+        cls_path = os.path.join(data_dir, cls)
+        if not os.path.isdir(cls_path):
+            continue
+        for fname in os.listdir(cls_path):
+            path = os.path.join(cls_path, fname)
+            try:
+                with Image.open(path) as img:
+                    dims.append(img.size)
+                    image_count += 1
+                    if image_count >= max_images:
+                        break
+            except:
+                continue
+        if image_count >= max_images:
+            break
+    dims = np.array(dims)
+    avg_size = tuple(np.mean(dims, axis=0).astype(int))
+    min_size = tuple(np.min(dims, axis=0))
+    max_size = tuple(np.max(dims, axis=0))
+    most_common = Counter(map(tuple, dims)).most_common(1)[0]
+
+    print(f"Total images scanned: {len(dims)}")
+    print(f"Average image size:   {avg_size}")
+    print(f"Smallest image size: {min_size}")
+    print(f"Largest image size:  {max_size}")
+    print(f"Most common size:    {most_common[0]} (count: {most_common[1]})")
+
 def loadAllDatasets(dataset_path, batch_size=None):
     training_path = os.path.join(dataset_path, "base_model_data/Train_Set_Folder")
     val_path = os.path.join(dataset_path, "base_model_data/Validation_Set_Folder")
     testing_path = os.path.join(dataset_path, "base_model_data/Test_Set_Folder")
 
-    training_data = loadDataset(training_path, batch_size=batch_size, shuffle=True)
-    val_data = loadDataset(val_path, batch_size=batch_size)
-    testing_data = loadDataset(testing_path, batch_size=batch_size)
+    print(f'\n----------\nAnalyzing Training Data\n----------\n')
+    analyzeDataset(training_path)
+    print(f'\n----------\nAnalyzing Validation Data\n----------\n')
+    analyzeDataset(val_path)
+    print(f'\n----------\nAnalyzing Testing Data\n----------\n')
+    analyzeDataset(testing_path)
+
+    training_data = loadDataset(training_path, batch_size=batch_size, shuffle=True, image_size=(224,224))
+    val_data = loadDataset(val_path, batch_size=batch_size, image_size=(224,224))
+    testing_data = loadDataset(testing_path, batch_size=batch_size, image_size=(224,224))
 
     class_names = training_data.class_names
 
     return training_data, val_data, testing_data, class_names
+
 ######################
 # Get a single image and return it as a CV2 image
 def loadImage(image_path):
@@ -182,8 +232,8 @@ def create_dual_input_dataset(dataset, segmentation_fn):
         )
 
         #Set shapes manually so that model TF can use
-        raw.set_shape([128, 128, 3])
-        mask.set_shape([128, 128, 1])
+        raw.set_shape([224, 224, 3])
+        mask.set_shape([224, 224, 1])
         label.set_shape([])
 
         #Must return in tuple of raw and mask for multiple inputs

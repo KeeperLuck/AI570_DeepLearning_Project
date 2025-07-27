@@ -5,7 +5,7 @@ from BaseModel import BaseModel
 from tensorflow.keras.applications import VGG19
 
 class DualInputModel(BaseModel):
-    def __init__(self, image_shape=(128, 128, 3), mask_shape=(128, 128, 1), num_classes=6):
+    def __init__(self, image_shape=(224, 224, 3), mask_shape=(224, 224, 1), num_classes=6):
         super().__init__()
         self.image_shape = image_shape
         self.mask_shape = mask_shape
@@ -108,7 +108,7 @@ class DualInputModel(BaseModel):
         def build_tuner_model(hp):
             self.model.compile(
                 optimizer=keras.optimizers.Adam(
-                    hp.Choice('learning_rate', [1e-2, 1e-3, 1e-4])
+                    hp.Choice('learning_rate', [.01, .001, .0001])
                 ),
                 loss='categorical_crossentropy',
                 metrics=['accuracy']
