@@ -194,6 +194,8 @@ def getEdgesFromGreenness(image, use_mpn=False):
 
 def is_green_enough(image_np, threshold=0.33):
     #separate RGB and determine if image is green enough to use greenness
+    #Utilizing concepts from https://medium.com/%40flippygarcia/color-image-segmentation-using-python-part-2-a0db05b6554a
+    #This teaches how to segment R,G,B values, and then we are just taking the ratio of green
     red = image_np[:, :, 0].astype(np.float32)
     green = image_np[:, :, 1].astype(np.float32)
     blue = image_np[:, :, 2].astype(np.float32)
