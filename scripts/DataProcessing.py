@@ -228,6 +228,8 @@ def create_dual_input_dataset(dataset, segmentation_fn):
 
             #Normalize mask to [0, 1]
             mask = mask.astype(np.float32) / 255.0
+
+            #Convert to gray since we want to focus on segmented features
             if mask.ndim == 3:
                 mask = cv2.cvtColor(mask, cv2.COLOR_BGR2GRAY)
             mask = np.expand_dims(mask, axis=-1)
